@@ -1,0 +1,16 @@
+[package]
+name = "nix-upload-daemon"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-channel = "1.9.0"
+async-trait = "0.1.72"
+clap = { version = "4.3.19", features = ["std", "env", "derive"] }
+futures = "0.3.28"
+thiserror = "1.0.44"
+tokio = { version = "1.29.1", features = ["full"] }
+tokio-stream = "0.1.14"
+tokio-util = "0.7.8"
