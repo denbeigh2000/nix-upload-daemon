@@ -13,7 +13,9 @@
   };
 
   outputs = { self, flake-utils, naersk, nixpkgs, rust-overlay }:
-    flake-utils.lib.eachDefaultSystem (system:
+  {
+    inherit (import ./modules) nixosModules darwinModules;
+  } // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = (import nixpkgs) {
           overlays = [ rust-overlay.overlays.default ];
