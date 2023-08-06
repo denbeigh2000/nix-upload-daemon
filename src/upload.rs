@@ -55,6 +55,10 @@ where
 
         cmd.arg("store").arg("sign").arg("--key-file").arg(k_path);
 
+        for path in &paths {
+            cmd.arg(path);
+        }
+
         let status = cmd.status().await.map_err(Error::ForkingSignProcess)?;
         if !status.success() {
             return Err(Error::CouldNotSign(status));
