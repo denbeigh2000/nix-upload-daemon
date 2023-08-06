@@ -1,6 +1,6 @@
 let
   nixos = import ./nixos.nix;
-  darwin = import ./nixos.nix;
+  darwin = import ./darwin.nix;
 in
 {
   nixosModules = {

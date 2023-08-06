@@ -13,31 +13,29 @@
   };
 
   outputs = { self, flake-utils, naersk, nixpkgs, rust-overlay }:
-  {
-    inherit (import ./modules) nixosModules darwinModules;
-  } // flake-utils.lib.eachDefaultSystem (system:
+    {
+      overlays.default = import ./overlay.nix { inherit naersk; };
+      inherit (import ./modules) nixosModules darwinModules;
+    } // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = (import nixpkgs) {
-          overlays = [ rust-overlay.overlays.default ];
+          overlays = [ rust-overlay.overlays.default self.overlays.default ];
           inherit system;
         };
-
-        naersk' = pkgs.callPackage naersk { };
 
         # rustPkgs = with pkgs.rust-bin.stable.latest; [ default rust-analyzer rust-src ];
         rust = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" "rust-analyzer" ];
         };
-
       in
       rec {
-        # For `nix build` & `nix run`:
-        defaultPackage = naersk'.buildPackage {
-          src = ./.;
+        packages = {
+          default = pkgs.nix-upload-daemon;
+          inherit (pkgs) nix-upload-daemon;
         };
 
         # For `nix develop`:
-        devShell = pkgs.mkShell {
+        devShells.default = pkgs.mkShell {
           nativeBuildInputs = [ rust ];
         };
       }

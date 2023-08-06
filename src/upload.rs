@@ -53,7 +53,11 @@ where
         }
         let mut cmd = tokio::process::Command::new("nix");
 
-        cmd.arg("store").arg("sign").arg("--key-file").arg(k_path);
+        cmd.arg("store")
+            .arg("sign")
+            .arg("--recursive")
+            .arg("--key-file")
+            .arg(k_path);
 
         for path in &paths {
             cmd.arg(path);

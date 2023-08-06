@@ -1,21 +1,23 @@
-{ pkgs, lib, config }:
+{ pkgs, lib, config, ... }:
 
 let
   cfg = config.services.nix-upload-daemon;
 
+  inherit (builtins) isNull;
   inherit (pkgs) nix-upload-daemon writeShellScript;
   inherit (lib) mkEnableOption mkIf mkOption optionalString types;
+  inherit (cfg.post-build-hook) secretKey;
   description = "a daemon that asynchronously copies paths to a remote store";
-  key-flag = optionalString (cfg.keyPath != null) "--sign-key ${cfg.keyPath}";
+  key-flag = optionalString (!isNull secretKey) "--sign-key ${secretKey}";
   upload-hook = writeShellScript "post-build-hook" ''
     OUT_PATHS="$OUT_PATHS" ${nix-upload-daemon}/bin/nix-upload-daemon \
       --bind ${cfg.binding} \
-      upload ${key-flag}
+      upload ${key-flag} || echo "failed to run post-build hook" >&2
   '';
 in
 
 {
-  options = with types; {
+  options.services.nix-upload-daemon = with types; {
     enable = mkEnableOption description;
     target = mkOption {
       description = "URL of store to upload to";
@@ -58,16 +60,10 @@ in
   };
 
   config = mkIf cfg.enable {
-    users.users.${cfg.user} = {
-      isSystemUser = true;
+    users.users.${cfg.username} = {
       inherit (cfg) uid;
-      # group = cfg.group;
     };
 
-    nix.extraOptions = optionalString cfg.post-build-hook.enable "post-build-hook = ${upload-paths}";
-
-    users.groups.${cfg.group} = {};
-
-    # systemd.services.upload
+    nix.extraOptions = optionalString cfg.post-build-hook.enable "post-build-hook = ${upload-hook}";
   };
 }

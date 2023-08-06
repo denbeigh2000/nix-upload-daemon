@@ -1,4 +1,6 @@
+use std::fs::Permissions;
 use std::net::SocketAddr;
+use std::os::unix::prelude::PermissionsExt;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -22,7 +24,15 @@ impl Binding {
     pub async fn listen(self) -> Result<Listener, std::io::Error> {
         match self {
             Binding::Tcp(addr) => TcpListener::bind(addr).await.map(Listener::Tcp),
-            Binding::Unix(path) => UnixListener::bind(path).map(Listener::Unix),
+            Binding::Unix(path) => {
+                if path.exists() {
+                    tokio::fs::remove_file(&path).await?;
+                }
+                let listener = UnixListener::bind(&path).map(Listener::Unix)?;
+                let perms = Permissions::from_mode(0o0666);
+                tokio::fs::set_permissions(path, perms).await?;
+                Ok(listener)
+            },
         }
     }
 

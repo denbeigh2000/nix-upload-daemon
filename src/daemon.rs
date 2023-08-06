@@ -1,5 +1,5 @@
-use std::process::ExitStatus;
 use std::path::PathBuf;
+use std::process::ExitStatus;
 
 use async_channel::{Receiver, Sender};
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
@@ -53,10 +53,7 @@ where
     }
 }
 
-async fn work(
-    copy_dest: &str,
-    r: &Receiver<PathBuf>,
-) -> Result<(), WorkerError> {
+async fn work(copy_dest: &str, r: &Receiver<PathBuf>) -> Result<(), WorkerError> {
     loop {
         let item_path = match r.recv().await {
             Ok(p) => p,
@@ -65,7 +62,15 @@ async fn work(
         };
 
         let mut cmd = tokio::process::Command::new("nix");
-        cmd.arg("copy").arg(&item_path).arg("--to").arg(copy_dest);
+        cmd.arg("--experimental-features")
+            .arg("flakes")
+            .arg("--experimental-features")
+            .arg("nix-command")
+            .arg("copy")
+            .arg(&item_path)
+            .arg("--to")
+            .arg(copy_dest)
+            .env("NIX_SSHOPTS", "-oStrictHostKeyChecking=no");
         let status = cmd
             .status()
             .await

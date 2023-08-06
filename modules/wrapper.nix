@@ -1,7 +1,7 @@
-{ lib, binding, target, workers, package }:
+{ lib, binding, target, workers, package, ... }:
 
 let
-  inherit (builtins) isNull;
+  inherit (builtins) isNull toString;
   inherit (lib) optionalString;
 in
 
@@ -9,5 +9,5 @@ in
 ${package}/bin/nix-upload-daemon \
   --bind "${binding}" \
   serve \
-  --copy-destination "${target}" ${lib.optionalString (!isNull workers) "--workers ${workers}"}
+  --copy-destination "${target}" ${lib.optionalString (!isNull workers) "--workers ${toString workers}"}
 ''
