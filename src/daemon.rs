@@ -1,20 +1,27 @@
-use std::error::Error;
+use std::process::ExitStatus;
 use std::path::PathBuf;
 
-use async_channel::{Sender, Receiver};
-use async_trait::async_trait;
+use async_channel::{Receiver, Sender};
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
-use tokio::net::{TcpListener, TcpStream, UnixListener, UnixStream};
+
 use tokio_util::sync::CancellationToken;
 
+use crate::binding::Listener;
 
 #[derive(thiserror::Error, Debug)]
-pub enum ServeError {}
+pub enum ServeError {
+    #[error("error listening for new connection: {0}")]
+    GettingConnection(std::io::Error),
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum WorkerError {
     #[error("error reading connection: {0}")]
     ReadingConnection(std::io::Error),
+    #[error("error running `nix copy`: {0}")]
+    ForkingUploadProcess(std::io::Error),
+    #[error("uploading process failed with status {0}")]
+    CouldNotUpload(ExitStatus),
 }
 
 async fn handle_conn<C>(conn: C, sender: Sender<PathBuf>) -> Result<(), WorkerError>
@@ -39,67 +46,61 @@ where
             continue;
         }
 
-        sender.send(path).await.expect("no receivers available => deadlock");
+        sender
+            .send(path)
+            .await
+            .expect("no receivers available => deadlock");
     }
 }
 
-async fn work(copy_dest: String, r: Receiver<PathBuf>)
-{
+async fn work(
+    copy_dest: &str,
+    r: &Receiver<PathBuf>,
+) -> Result<(), WorkerError> {
     loop {
-        let path = match r.recv().await{
+        let item_path = match r.recv().await {
             Ok(p) => p,
             // Closed
-            Err(_) => return,
+            Err(_) => return Ok(()),
         };
 
         let mut cmd = tokio::process::Command::new("nix");
-        cmd.arg("copy").arg(&path).arg("--to").arg(&copy_dest);
-        let status = match cmd.status().await {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("error forking: {e}");
-                return;
-            },
-        };
+        cmd.arg("copy").arg(&item_path).arg("--to").arg(copy_dest);
+        let status = cmd
+            .status()
+            .await
+            .map_err(WorkerError::ForkingUploadProcess)?;
 
         if !status.success() {
-            eprintln!("error sending to store, exited with status {status}");
+            return Err(WorkerError::CouldNotUpload(status));
         }
     }
 }
 
-pub async fn serve<S>(cancel: CancellationToken, copy_dest: String, workers: u8, mut source: S) -> Result<(), ServeError>
-where
-    S: ConnectionSource + 'static,
-{
+pub async fn serve(
+    cancel: CancellationToken,
+    copy_dest: String,
+    workers: u8,
+    mut source: Listener,
+) -> Result<(), ServeError> {
     let (s, r) = async_channel::unbounded::<PathBuf>();
 
     for _ in 0..workers {
         let copy_dest = copy_dest.clone();
         let r = r.clone();
         tokio::spawn(async move {
-            work(copy_dest, r).await;
+            while let Err(e) = work(&copy_dest, &r).await {
+                eprintln!("worker raised error: {e}");
+            }
         });
     }
 
     loop {
-        let conn = tokio::select! {
-            result = source.get_connection() => {
-                match result {
-                    Ok(c) => c,
-                    Err(e) => {
-                        eprintln!("error accepting connection: {e}");
-                        return Ok(());
-                    },
-                }
-            },
-            _ = cancel.cancelled() => {
-                // We are shutting down
-                return Ok(());
-            }
+        let conn = match source.get_connection(cancel.clone()).await {
+            Ok(Some(conn)) => conn,
+            Ok(None) => return Ok(()),
+            Err(e) => return Err(ServeError::GettingConnection(e)),
         };
-        // let conn = match source.get_connection().await {
-        // };
 
         let s = s.clone();
         tokio::spawn(async move {
@@ -107,35 +108,5 @@ where
                 eprintln!("error handling connection: {e}");
             }
         });
-    }
-}
-
-#[async_trait]
-pub trait ConnectionSource: Send {
-    type Connection: AsyncRead + Send + Unpin + 'static;
-    type Error: Error + Sized + Send + 'static;
-
-    async fn get_connection(&mut self) -> Result<Self::Connection, Self::Error>;
-}
-
-#[async_trait]
-impl ConnectionSource for UnixListener {
-    type Connection = UnixStream;
-    type Error = std::io::Error;
-
-    async fn get_connection(&mut self) -> Result<Self::Connection, Self::Error> {
-        let (socket, _) = self.accept().await?;
-        Ok(socket)
-    }
-}
-
-#[async_trait]
-impl ConnectionSource for TcpListener {
-    type Connection = TcpStream;
-    type Error = std::io::Error;
-
-    async fn get_connection(&mut self) -> Result<Self::Connection, Self::Error> {
-        let (socket, _) = self.accept().await?;
-        Ok(socket)
     }
 }

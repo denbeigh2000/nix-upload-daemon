@@ -1,23 +1,31 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use tokio::net::{TcpListener, UnixListener};
+use tokio::task::JoinError;
 use tokio_util::sync::CancellationToken;
 
+pub mod binding;
 mod daemon;
+mod upload;
+
+use binding::Binding;
 
 #[derive(Parser)]
 pub struct UploadSubcommand {
     #[arg(short, long, env)]
+    bind: Binding,
+
+    #[arg(short, long, env)]
     sign_key: Option<PathBuf>,
+
+    #[arg(short, long, env = "OUT_PATHS")]
+    paths: Vec<PathBuf>,
 }
 
 #[derive(Parser)]
 pub struct ServeSubcommand {
-    #[arg(short, long, env, group = "exposure")]
-    port: Option<u16>,
-    #[arg(short, long, env, group = "exposure")]
-    unix_socket: Option<PathBuf>,
+    #[arg(short, long, env)]
+    bind: Binding,
 
     #[arg(short, long, env, default_value = "2", value_parser = clap::value_parser!(u8).range(1..64))]
     workers: Option<u8>,
@@ -41,32 +49,27 @@ pub enum ServeError {
 pub async fn serve(cancel: CancellationToken, args: ServeSubcommand) -> Result<(), ServeError> {
     let dest = args.copy_destination;
     let workers = args.workers.unwrap_or(4);
-    match &(args.port, args.unix_socket) {
-        (Some(p), None) => {
-            let listener = TcpListener::bind(format!("127.0.0.1:{p}"))
-                .await
-                .map_err(ServeError::MakingListener)?;
-
-            daemon::serve(cancel, dest, workers, listener).await?;
-        }
-
-        (None, Some(p)) => {
-            let listener = UnixListener::bind(p)
-                .map_err(ServeError::MakingListener)?;
-
-            daemon::serve(cancel, dest, workers, listener).await?;
-        }
-
-        (None, None) => return Err(ServeError::NoBindingSpecified),
-        (Some(_), Some(_)) => unreachable!("enforced by clap"),
-    };
+    let listener = args.bind.listen().await.map_err(ServeError::MakingListener)?;
+    daemon::serve(cancel, dest, workers, listener).await?;
 
     Ok(())
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum UploadError {}
+pub enum UploadError {
+    #[error("error writing to daemon: {0}")]
+    WritingData(#[from] upload::Error),
+    #[error("error creating connection: {0}")]
+    ConnectingToDaemon(#[from] std::io::Error),
+    #[error("error waiting on tasks to finish: {0}")]
+    JoiningThread(#[from] JoinError),
+}
 
 pub async fn upload(cancel: CancellationToken, args: UploadSubcommand) -> Result<(), UploadError> {
-    todo!()
+    let paths: Vec<PathBuf> = args.paths.into_iter().filter(|p| p.exists()).collect();
+    // TODO: Respect signals?
+    let socket = args.bind.connect().await.map_err(UploadError::ConnectingToDaemon)?;
+    upload::upload(cancel, socket, &paths, args.sign_key.as_deref()).await?;
+
+    Ok(())
 }
