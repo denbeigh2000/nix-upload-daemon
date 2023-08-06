@@ -70,7 +70,7 @@ async fn work(copy_dest: &str, r: &Receiver<PathBuf>) -> Result<(), WorkerError>
             .arg(&item_path)
             .arg("--to")
             .arg(copy_dest)
-            .env("NIX_SSHOPTS", "-oStrictHostKeyChecking=no");
+            .env("NIX_SSHOPTS", "-oStrictHostKeyChecking=no -oUpdateHostKeys=no");
         let status = cmd
             .status()
             .await

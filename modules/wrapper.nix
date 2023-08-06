@@ -1,13 +1,26 @@
-{ lib, binding, target, workers, package, ... }:
+{ writeShellApplication
+, lib
+, binding
+, target
+, workers
+, package
+, nix
+, openssh
+, ...
+}:
 
 let
   inherit (builtins) isNull toString;
   inherit (lib) optionalString;
 in
 
-''
-${package}/bin/nix-upload-daemon \
-  --bind "${binding}" \
-  serve \
-  --copy-destination "${target}" ${lib.optionalString (!isNull workers) "--workers ${toString workers}"}
-''
+writeShellApplication {
+  name = "nix-upload-daemon-wrapped";
+  runtimeInputs = [ package nix openssh ];
+  text = ''
+    nix-upload-daemon \
+      --bind "${binding}" \
+      serve \
+      --copy-destination "${target}" ${lib.optionalString (!isNull workers) "--workers ${toString workers}"}
+  '';
+}

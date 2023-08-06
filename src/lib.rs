@@ -15,7 +15,7 @@ pub struct UploadSubcommand {
     #[arg(short, long, env)]
     sign_key: Option<PathBuf>,
 
-    #[arg(short, long, env = "OUT_PATHS")]
+    #[arg(short, long, env = "OUT_PATHS", value_delimiter = ' ')]
     paths: Vec<PathBuf>,
 }
 

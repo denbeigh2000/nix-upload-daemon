@@ -3,7 +3,7 @@
 let
   cfg = config.services.nix-upload-daemon;
 
-  script = pkgs.callPackage ./wrapper.nix cfg;
+  command = pkgs.callPackage ./wrapper.nix cfg;
 in
 {
   imports = [ ./common.nix ];
@@ -18,16 +18,13 @@ in
     users.knownUsers = [ cfg.username ];
 
     launchd.daemons.upload-daemon = {
-      inherit script;
+      command = "${command}/bin/nix-upload-daemon-wrapped";
       serviceConfig = {
         UserName = cfg.username;
         GroupName = "daemon";
         KeepAlive = true;
         StandardOutPath = "/tmp/org.nixos.nix-upload-daemon.log";
         StandardErrorPath = "/tmp/org.nixos.nix-upload-daemon.err";
-        EnvironmentVariables = {
-          PATH = "${pkgs.nix}/bin:${pkgs.openssh}/bin";
-        };
       };
     };
   };

@@ -4,16 +4,20 @@ let
   cfg = config.services.nix-upload-daemon;
 
   inherit (builtins) isNull;
-  inherit (pkgs) nix-upload-daemon writeShellScript;
+  inherit (pkgs) nix nix-upload-daemon writeShellApplication;
   inherit (lib) mkEnableOption mkIf mkOption optionalString types;
   inherit (cfg.post-build-hook) secretKey;
   description = "a daemon that asynchronously copies paths to a remote store";
   key-flag = optionalString (!isNull secretKey) "--sign-key ${secretKey}";
-  upload-hook = writeShellScript "post-build-hook" ''
-    OUT_PATHS="$OUT_PATHS" ${nix-upload-daemon}/bin/nix-upload-daemon \
-      --bind ${cfg.binding} \
-      upload ${key-flag} || echo "failed to run post-build hook" >&2
-  '';
+  upload-hook = writeShellApplication {
+    name = "post-build-upload-hook";
+    runtimeInputs = [ nix-upload-daemon nix ];
+    text = ''
+      OUT_PATHS="$OUT_PATHS" nix-upload-daemon \
+        --bind ${cfg.binding} \
+        upload ${key-flag} || echo "failed to run post-build hook" >&2
+    '';
+  };
 in
 
 {
@@ -64,6 +68,6 @@ in
       inherit (cfg) uid;
     };
 
-    nix.extraOptions = optionalString cfg.post-build-hook.enable "post-build-hook = ${upload-hook}";
+    nix.extraOptions = optionalString cfg.post-build-hook.enable "post-build-hook = ${upload-hook}/bin/post-build-upload-hook";
   };
 }

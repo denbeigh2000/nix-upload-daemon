@@ -53,7 +53,11 @@ where
         }
         let mut cmd = tokio::process::Command::new("nix");
 
-        cmd.arg("store")
+        cmd.arg("--experimental-features")
+            .arg("flakes")
+            .arg("--experimental-features")
+            .arg("nix-command")
+            .arg("store")
             .arg("sign")
             .arg("--recursive")
             .arg("--key-file")

@@ -5,7 +5,7 @@ let
 
   inherit (lib) mkOption types;
 
-  script = pkgs.callPackage ./wrapper.nix cfg;
+  command = pkgs.callPackage ./wrapper.nix cfg;
 in
 {
   imports = [ ./common.nix ];
@@ -28,8 +28,7 @@ in
 
     systemd.services.nix-upload-daemon = {
       wantedBy = [ "multi-user.target" ];
-      path = [ pkgs.nix pkgs.openssh ];
-      inherit script;
+      script = "${command}/bin/nix-upload-daemon-wrapped";
       serviceConfig = {
         Restart = "always";
         RuntimeDirectory = "upload-daemon";
