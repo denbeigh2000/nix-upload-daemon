@@ -1,13 +1,16 @@
 use clap::{Parser, Subcommand};
 use futures::{FutureExt, TryFutureExt};
 use nix_upload_daemon::{
-    serve, upload, ServeError, ServeSubcommand, UploadError, UploadSubcommand,
+    serve, upload, Binding, ServeError, ServeSubcommand, UploadError, UploadSubcommand,
 };
 use tokio::task::JoinError;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Parser)]
 struct CliArgs {
+    #[arg(short, long, env)]
+    bind: Binding,
+
     #[command(subcommand)]
     action: Action,
 }
@@ -51,9 +54,10 @@ fn into_main_err<E: Into<MainError>>(err: E) -> MainError {
 async fn real_main() -> Result<(), MainError> {
     let cancel = CancellationToken::new();
     let local_cancel = cancel.clone();
-    let fut = match CliArgs::try_parse()?.action {
-        Action::Serve(s) => tokio::spawn(serve(cancel, s).map_err(into_main_err)),
-        Action::Upload(u) => tokio::spawn(upload(cancel, u).map_err(into_main_err)),
+    let args = CliArgs::try_parse()?;
+    let fut = match args.action {
+        Action::Serve(s) => tokio::spawn(serve(cancel, args.bind, s).map_err(into_main_err)),
+        Action::Upload(u) => tokio::spawn(upload(cancel, args.bind, u).map_err(into_main_err)),
     };
 
     let (fut, handle) = tokio::spawn(fut).remote_handle();

@@ -8,13 +8,10 @@ pub mod binding;
 mod daemon;
 mod upload;
 
-use binding::Binding;
+pub use binding::Binding;
 
 #[derive(Parser)]
 pub struct UploadSubcommand {
-    #[arg(short, long, env)]
-    bind: Binding,
-
     #[arg(short, long, env)]
     sign_key: Option<PathBuf>,
 
@@ -24,9 +21,6 @@ pub struct UploadSubcommand {
 
 #[derive(Parser)]
 pub struct ServeSubcommand {
-    #[arg(short, long, env)]
-    bind: Binding,
-
     #[arg(short, long, env, default_value = "2", value_parser = clap::value_parser!(u8).range(1..64))]
     workers: Option<u8>,
 
@@ -46,10 +40,10 @@ pub enum ServeError {
     Serving(#[from] daemon::ServeError),
 }
 
-pub async fn serve(cancel: CancellationToken, args: ServeSubcommand) -> Result<(), ServeError> {
+pub async fn serve(cancel: CancellationToken, bind: Binding, args: ServeSubcommand) -> Result<(), ServeError> {
     let dest = args.copy_destination;
     let workers = args.workers.unwrap_or(4);
-    let listener = args.bind.listen().await.map_err(ServeError::MakingListener)?;
+    let listener = bind.listen().await.map_err(ServeError::MakingListener)?;
     daemon::serve(cancel, dest, workers, listener).await?;
 
     Ok(())
@@ -65,10 +59,10 @@ pub enum UploadError {
     JoiningThread(#[from] JoinError),
 }
 
-pub async fn upload(cancel: CancellationToken, args: UploadSubcommand) -> Result<(), UploadError> {
+pub async fn upload(cancel: CancellationToken, bind: Binding, args: UploadSubcommand) -> Result<(), UploadError> {
     let paths: Vec<PathBuf> = args.paths.into_iter().filter(|p| p.exists()).collect();
     // TODO: Respect signals?
-    let socket = args.bind.connect().await.map_err(UploadError::ConnectingToDaemon)?;
+    let socket = bind.connect().await.map_err(UploadError::ConnectingToDaemon)?;
     upload::upload(cancel, socket, &paths, args.sign_key.as_deref()).await?;
 
     Ok(())
