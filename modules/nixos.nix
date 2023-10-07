@@ -3,7 +3,7 @@
 let
   cfg = config.services.nix-upload-daemon;
 
-  inherit (lib) mkOption types;
+  inherit (lib) mkIf mkOption types;
 
   command = pkgs.callPackage ./wrapper.nix cfg;
 in
@@ -19,12 +19,12 @@ in
     };
   };
 
-  config = {
+  config = mkIf cfg.enable {
     users.users.${cfg.username} = {
       isSystemUser = true;
       group = cfg.group;
     };
-    users.groups.${cfg.group} = {};
+    users.groups.${cfg.group} = { };
 
     systemd.services.nix-upload-daemon = {
       wantedBy = [ "multi-user.target" ];

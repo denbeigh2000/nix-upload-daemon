@@ -1,6 +1,7 @@
 { pkgs, lib, config, ... }@inputs:
 
 let
+  inherit (lib) mkIf;
   cfg = config.services.nix-upload-daemon;
 
   command = pkgs.callPackage ./wrapper.nix cfg;
@@ -8,7 +9,7 @@ in
 {
   imports = [ ./common.nix ];
 
-  config = {
+  config = mkIf cfg.enable {
     users.users.${cfg.username} = {
       # Unconditionally run in daemon group on darwin
       gid = 1;
